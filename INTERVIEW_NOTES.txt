@@ -1,0 +1,133 @@
+================================================================================
+  BankingApplicationControlLayer — Interview Notes (Q&A)
+  A growing list of interview questions about this project and how to answer.
+  For the project basics, see PROJECT_EXPLAINED_SIMPLE.txt
+================================================================================
+
+
+================================================================================
+Q1. "Your rulebook is just if-else conditional logic. How is it different?"
+================================================================================
+
+SHORT ANSWER (say this first)
+-----------------------------
+  "Yes — at the lowest level each rule IS an if-condition, and I'd be honest
+   about that. The difference is how the conditions are ORGANISED. Instead of
+   one big if-else block, each rule is its own small class behind a common
+   interface. The engine runs ALL of them, collects every result, and picks
+   the strictest. That gives me traceability, easy testing, and new rules
+   without touching existing code — which matter a lot in banking."
+
+  Tip: admitting "yes, it's an if" up front shows confidence. Then explain
+  why the structure matters.
+
+
+THE DIFFERENCE IN CODE
+----------------------
+
+  PLAIN IF-ELSE:
+
+    public Outcome check(Action a, Account acc) {
+        if (a.amount() > 5000) return BLOCK;
+        else if (acc.status() != ACTIVE) return BLOCK;
+        else if (!a.payee().verified()) return ESCALATE;
+        else if (todayTotal + a.amount() > 5000) return BLOCK;
+        // ... 20 more branches
+        return ALLOW;
+    }
+
+  RULEBOOK (RULES ENGINE):
+
+    public interface Rule {
+        String id();                                  // "R-AMT-02"
+        RuleResult apply(BankSnapshot bank, RequestedAction action);
+    }
+
+    public final class DailyLimitRule implements Rule {
+        public String id() { return "R-AMT-02"; }
+        public RuleResult apply(BankSnapshot bank, RequestedAction a) {
+            BigDecimal total = bank.todayOutflow().add(a.amount());
+            return total.compareTo(bank.limits().daily()) > 0
+                ? RuleResult.block(id(), "Daily total " + total + " exceeds limit")
+                : RuleResult.pass(id());
+        }
+    }
+
+    // The engine: run ALL rules, keep the strictest result
+    List<RuleResult> results = rules.stream()
+                                    .map(r -> r.apply(bank, action))
+                                    .toList();
+    Outcome worst = results.stream()
+                           .map(RuleResult::outcome)
+                           .max(naturalOrder())
+                           .orElse(ALLOW);
+
+
+SIX CONCRETE DIFFERENCES
+------------------------
+
+  1. ALL REASONS, NOT JUST THE FIRST
+     If-else stops at the first match, so you learn only one reason.
+     The rulebook runs every rule and collects all results.
+     -> The audit log says "blocked by R-AMT-02 AND R-PAY-01". Banks must be
+        able to explain every decision.
+
+  2. NO ORDERING BUGS
+     In if-else, putting an ESCALATE check above a BLOCK check means a
+     dangerous action gets escalated instead of blocked.
+     In the rulebook, order doesn't matter: the engine picks the strictest
+     result (BLOCK > ESCALATE > ALLOW).
+     -> Reordering code can never weaken safety.
+
+  3. ADD WITHOUT EDITING (Open/Closed)
+     If-else: edit one giant method for each new rule.
+     Rulebook: add one new class; the engine is unchanged.
+     -> New regulations = new rules, with no risk of breaking old ones.
+
+  4. EASY TO TEST
+     If-else: you need inputs that reach branch #17.
+     Rulebook: one small test per rule, named after its ID.
+
+  5. EVERY RULE HAS A NAME / ID
+     If-else logic is anonymous. Each rule has an ID like R-AMT-02.
+     -> Traces from scenario -> rule -> test -> audit log. The scorecard can
+        show which rules fire most often, or never fire.
+
+  6. CONFIGURABLE AT RUNTIME
+     If-else is fixed at compile time. Rules are a list, so they can be
+     turned on or off, or given different thresholds per autonomy level or
+     per bank.
+     -> Experiments like "what if I disable the drift rules?" become one
+        config change.
+
+
+ANALOGY
+-------
+  If-else is like a SINGLE GUARD with a memorised checklist who stops at the
+  first problem they notice.
+
+  A rulebook is like a PANEL OF SPECIALISTS — one checks amounts, one checks
+  the payee, one checks account status. Each writes down a verdict, and the
+  strictest verdict wins. You can add a specialist without retraining the
+  others, and every decision comes with a signed report.
+
+
+LIKELY FOLLOW-UP: "Then why use rules instead of the LLM?"
+----------------------------------------------------------
+  "Rules are DETERMINISTIC — same input, same answer, every time. They can't
+   be persuaded by a convincing story and they cost nothing to run. So
+   anything that can be checked as a fact (limits, account status, known
+   payees) goes to the rules. The LLM is only for things rules can't
+   express, like 'send it to the same account as before.'"
+
+
+PATTERNS / PRINCIPLES TO NAME
+-----------------------------
+  - Strategy pattern         : each rule is an interchangeable implementation
+                               of the Rule interface
+  - Composite / aggregation  : the engine combines many results into one
+                               outcome
+  - Open/Closed principle    : extend by adding, not by modifying
+  - Single Responsibility    : one rule checks one thing
+
+  Design references: DESIGN.md §4.3 (decision pipeline), §4.4 (rules catalog)

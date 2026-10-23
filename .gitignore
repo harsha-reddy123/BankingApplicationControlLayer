@@ -1,0 +1,31 @@
+# --- Secrets / API keys (never commit) ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.jks
+*secret*
+*secrets*
+*credentials*
+*apikey*
+*api_key*
+*api-key*
+
+# --- Node ---
+node_modules/
+
+# --- Java / Maven ---
+target/
+*.class
+*.log
+
+# --- Evaluation output (DESIGN.md §4.9) ---
+results/
+
+# --- IDEs / OS ---
+.idea/
+*.iml
+.vscode/
+.DS_Store
