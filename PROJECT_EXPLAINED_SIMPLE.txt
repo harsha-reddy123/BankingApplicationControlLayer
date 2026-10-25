@@ -200,6 +200,12 @@ DESIGN PATTERNS
   Null Object / Stub     StubJudge for tests.
   Template Method        One contract test suite runs against both bank
                          implementations.
+  Value Object           Account, Limits, Field<T>, Decision: immutable
+                         records compared by value; withBalance() returns a
+                         new Account instead of changing the old one.
+  Static Factory         Field.customerStated(), Decision.allow()/block()/
+                         failsafe(), RequestedAction.moneyMovement().
+                         -> named constructors that are hard to misuse
 
 SOLID PRINCIPLES
 
@@ -215,6 +221,8 @@ OTHER LLD POINTS
 
   - Immutability: Java records for all data.
   - Enums / sealed types for decisions and statuses.
+  - Make invalid states unrepresentable: the Decision constructor rejects an
+    ALLOW without an Authorization (INV-6), so the bug cannot exist at all.
   - Money uses BigDecimal, NEVER double (classic interview gotcha).
   - Fail-safe design: judge breaks -> ESCALATE.
   - Idempotency: retrying a payment never pays twice.

@@ -10,7 +10,7 @@ A **benchmark for an AI-agent guardrail in banking**. A control layer sits betwe
 
 ## Status
 
-**Design complete, no code yet.** Next milestone is **M1** (see Next steps). The repo currently contains only documents.
+**M1 in progress.** Done: parent POM, `bacl-domain` records/enums with tests (tasks 1.1–1.4). Next: `BankGateway`, `InMemoryBank`, `BankGatewayContractTest` (1.5–1.7).
 
 ## Docs in this repo — read before changing design
 
@@ -91,7 +91,7 @@ Scenario files: `bacl-scenarios/src/main/resources/scenarios/<CATEGORY>/<ID>.yam
 - `ANTHROPIC_API_KEY` is **not** set yet; only needed from M5 (LLM judge). Read it from the environment / a git-ignored `.env`; never hard-code or commit it. Tests must use `RecordedJudge`/`StubJudge`, never the live API.
 - When implementing `ClaudeJudge` (M5), check the current Anthropic Java SDK docs and model IDs rather than relying on memory; record the model version in every run's results.
 - Docker is **not** installed; needed only for Phase 2.
-- The folder is **not** a git repository yet. Suggest `git init` + `.gitignore` (`target/`, `results/`, `.env`, `.idea/`) as part of M1.
+- The folder is a git repository with a `.gitignore` (`target/`, `results/`, `.env`, `.idea/`, secrets).
 
 ## Commands (once M1 exists)
 

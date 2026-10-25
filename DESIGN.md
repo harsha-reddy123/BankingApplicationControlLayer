@@ -158,6 +158,8 @@ erDiagram
 | `Outcome` | `ALLOW`, `ESCALATE`, `BLOCK` (ordered by severity, ascending) |
 | `TriggeredBy` | `RULES`, `LLM`, `FAILSAFE` |
 | `Provenance` | `CUSTOMER_STATED`, `AGENT_INFERRED`, `EXTERNAL_CONTENT` |
+| `AutonomyLevel` | `L0`, `L1`, `L2`, `L3` (§4.6) |
+| `TransactionStatus` | `EXECUTED`, `REJECTED` (bank re-validation refused it, ADR-004) |
 
 #### Field provenance (key concept)
 
@@ -206,12 +208,21 @@ public record Decision(Outcome outcome, String reason, double confidence,
                        Optional<Authorization> authorization) {}
 
 public record RequestedAction(String actionId, ActionType type,
-                              Field<String> fromAccount, Field<String> payee,
-                              Field<BigDecimal> amount, Map<String, Field<String>> params,
-                              int turn) {}
+                              Field<String> fromAccount, Optional<Field<String>> payee,
+                              Optional<Field<BigDecimal>> amount, Map<String, Field<String>> params,
+                              int turn) {}           // payee + amount required for PAYMENT/TRANSFER (ADR-010)
 
 public record Field<T>(T value, Provenance provenance) {}
+
+public record Authorization(String authorizationId, String actionId, Instant issuedAt) {}
+
+public record DecisionRecord(String recordId, String runId, int turn, String actionId,
+                             AutonomyLevel autonomy, Outcome outcome, String reason,
+                             double confidence, TriggeredBy triggeredBy,
+                             List<String> ruleIds, Instant recordedAt) {}
 ```
+
+`Decision`'s constructor enforces **INV-6** (ALLOW ⇔ Authorization present) and the single-decision half of **INV-3** (`FAILSAFE` ⇒ `ESCALATE`), so an invalid `Decision` cannot be constructed (ADR-010).
 
 ### 4.3 Decision Pipeline
 
@@ -760,6 +771,7 @@ Dependency direction (no cycles): `domain ← bank ← control ← agent ← eva
 | **ADR-007** | Transactional outbox for audit, not dual writes | Guarantees INV-5 across crashes | Accepted (Phase 2) |
 | **ADR-008** | Maven multi-module with interfaces as the phase seam | Phase 2 adds implementations without touching core logic | Accepted |
 | **ADR-009** | Spring Boot for Phase 2 services | Industry standard in banking Java; good resilience/DB ecosystem | Proposed |
+| **ADR-010** | `RequestedAction.payee`/`amount` are `Optional` (required for PAYMENT/TRANSFER); `Decision` enforces INV-6 and FAILSAFE⇒ESCALATE in its constructor; `Authorization` = (authorizationId, actionId, issuedAt); `DecisionRecord` also carries actionId, autonomy and recordedAt | Loan/account changes have no payee or amount; invalid decisions should be unrepresentable rather than caught later; the eval scores per autonomy level from the record alone | Accepted (M1) |
 
 > When a threshold or rule changes, add a new ADR row rather than silently editing §4.4.
 
