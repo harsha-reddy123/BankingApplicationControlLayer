@@ -10,7 +10,9 @@ A **benchmark for an AI-agent guardrail in banking**. A control layer sits betwe
 
 ## Status
 
-**M1 in progress.** Done: parent POM, `bacl-domain` records/enums with tests (tasks 1.1–1.4). Next: `BankGateway`, `InMemoryBank`, `BankGatewayContractTest` (1.5–1.7).
+**M1 in progress.** Done: parent POM, `bacl-domain` records/enums with tests (tasks 1.1–1.4). Next: v2 domain update (`BANK_RECORD`, `IntentScope`/`CustomerIntent`, `requestedAtTurn`, plain `Field` payee/amount, `Payee.aliases`), then `BankGateway`, `InMemoryBank`, `BankGatewayContractTest` (1.5–1.7).
+
+Scope boundaries to respect (DESIGN.md §1): the agent is assumed to act with its **own delegated, scoped credentials**, never the customer's password (A-1); every action through the control layer is agent-initiated (A-2). Off-channel actions such as call-centre calls are out of reach (L-1). All data is synthetic (L-2).
 
 ## Docs in this repo — read before changing design
 
@@ -40,7 +42,8 @@ Scenario Suite → Agent Harness → CONTROL LAYER (Rules Engine → LLM Judge) 
 
 ### Phases
 - **Phase 1 (the real project):** single JVM, in-memory bank, sequential runs, JSONL audit log. **No database.**
-- **Phase 2 (bonus, distributed):** Spring Boot control-service + bank-service, PostgreSQL, idempotency keys, atomic daily-limit reservation, transactional outbox → Kafka, Resilience4j, Toxiproxy fault injection. Adds the `CNC` (concurrency) category. Don't start until Phase 1 (M7) is done.
+- **Phase 2 (bonus, distributed):** Spring Boot control-service + bank-service, PostgreSQL, idempotency keys, atomic daily-limit reservation, transactional outbox → Kafka, Resilience4j, Toxiproxy fault injection. Adds the `CNC` (concurrency) category; optional read replica (§5.8). Don't start until Phase 1 (M7) is done.
+- **Live agent mode (M11, optional):** a real tool-calling LLM agent whose tool calls the control layer intercepts. Comes **after** Phase 2 core (ADR-013).
 
 ## Non-negotiable invariants (DESIGN.md §4.3)
 
@@ -64,12 +67,17 @@ Every one needs a dedicated test; never weaken these to make a scenario pass.
 - ADR-007 Transactional outbox for audit (Phase 2).
 - ADR-008 Maven multi-module; interfaces are the phase seam.
 - ADR-009 Spring Boot for Phase 2 (proposed).
+- ADR-010 PII redacted before the LLM judge via a `RedactingJudge` decorator.
+- ADR-011 Customer intent labeled per turn; actions carry `requestedAtTurn`; rules R-INS-01/02 + `INS` category catch actions beyond the customer's instructions.
+- ADR-012 Provenance tags are **claims** — verify them (R-INS-03); `BANK_RECORD` provenance for deterministically resolved values.
+- ADR-013 Roadmap order: Phase 2 core (M8–M10) before live agent mode (M11) — owner targets distributed-systems roles.
+- ADR-014 Optional read replica for a stale-read / replication story.
 
 Also from the proposal: **ESCALATE is a correct answer, not a fallback**; **never report one blended accuracy number** — always per category (and per autonomy level); scenario labeling is the actual research contribution.
 
 ## Scenario categories (DESIGN.md §6)
 
-`LEG` legitimate baseline (needed to measure usefulness) · `AMT` excessive amount · `POL` policy violation · `PAY` new/changed payee · `AMB` ambiguous intent · `CON` conflicting instructions · `DRF` portfolio drift · `API` injected API failure (separate robustness axis) · `CNC` concurrency (Phase 2).
+`LEG` legitimate baseline (needed to measure usefulness) · `AMT` excessive amount · `POL` policy violation · `PAY` new/changed payee · `AMB` ambiguous intent · `CON` conflicting instructions · `DRF` portfolio drift · `INS` beyond instructions · `API` injected API failure (separate robustness axis) · `CNC` concurrency (Phase 2).
 
 Scenario files: `bacl-scenarios/src/main/resources/scenarios/<CATEGORY>/<ID>.yaml`, format in §4.8. Each must include `rationale` and `references` (rule/section IDs). Expected outcomes are **per autonomy level**, and state must be traced per level: an ESCALATE means the action did **not** execute, which changes later turns (see the corrected AMT-003 example in §4.8).
 
@@ -91,7 +99,7 @@ Scenario files: `bacl-scenarios/src/main/resources/scenarios/<CATEGORY>/<ID>.yam
 - `ANTHROPIC_API_KEY` is **not** set yet; only needed from M5 (LLM judge). Read it from the environment / a git-ignored `.env`; never hard-code or commit it. Tests must use `RecordedJudge`/`StubJudge`, never the live API.
 - When implementing `ClaudeJudge` (M5), check the current Anthropic Java SDK docs and model IDs rather than relying on memory; record the model version in every run's results.
 - Docker is **not** installed; needed only for Phase 2.
-- The folder is a git repository with a `.gitignore` (`target/`, `results/`, `.env`, `.idea/`, secrets).
+- The folder is a git repository on `main`, pushed to GitHub (`origin`, account `harsha-reddy123`, authenticated via `gh`). `.gitignore` covers secrets/`.env`, `node_modules/`, `target/`, `results/`, IDE files. Commit or push only when the owner asks.
 
 ## Commands (once M1 exists)
 
@@ -120,17 +128,20 @@ mvn -q -pl bacl-eval exec:java      # run the evaluation (to be wired in M4)
 
 ## Next steps (DESIGN.md §12)
 
-1. **M1 — Foundation (next):** `git init` + `.gitignore`; parent POM (Java 21, dependency management); `bacl-domain` records/enums incl. `Field<T>` + `Provenance`; `BankGateway` + `InMemoryBank`; `BankGatewayContractTest`.
+1. **M1 — Foundation (next):** parent POM (Java 21, dependency management); `bacl-domain` records/enums incl. `Field<T>` + `Provenance`; `BankGateway` + `InMemoryBank`; `BankGatewayContractTest`.
 2. **M2 — Rules engine:** all `R-*` rules, `AutonomyPolicy`, invariant tests INV-1..6.
 3. **M3 — Scenarios v0:** YAML loader + 3 scenarios each for LEG, AMT, POL, PAY.
 4. **M4 — Agent + Eval v0:** `ScriptedAgent`, `EvalRunner`, console scorecard (rules-only).
 5. **M5 — LLM judge:** `ClaudeJudge`, triggers, response cache, fail-safe; AMB + CON scenarios.
 6. **M6–M7:** drift + API-failure basics, full suite (~10 per category), Phase 1 report.
 7. **M8–M10 (Phase 2):** services + Postgres + idempotency → concurrency + outbox → fault injection + final report.
+8. **M11 (optional):** live agent mode.
+
+M2 includes R-INS-01..03 and `ProvenanceVerifier`; M3 includes INS scenarios; M5 includes `RedactingJudge`.
 
 ## Open questions (DESIGN.md §13)
 
-Q1 escalation terminal vs. `humanApproves`; Q2 drift thresholds; Q3 judge sees rule results or judges blind; Q4 LLM variance runs; Q5 second labeler for agreement; Q6 how to score ALLOW-then-rejected in CNC. Don't decide these silently — ask the owner.
+Q1 escalation terminal vs. `humanApproves`; Q2 drift thresholds; Q3 judge sees rule results or judges blind; Q4 LLM variance runs; Q5 second labeler for agreement; Q6 how to score ALLOW-then-rejected in CNC; Q7 who labels customer intent in live mode; Q8 how strict R-INS-03 matching should be. Don't decide these silently — ask the owner.
 
 ## Caveats
 
