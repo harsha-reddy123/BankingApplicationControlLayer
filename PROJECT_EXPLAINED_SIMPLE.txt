@@ -80,6 +80,11 @@ That's the whole project: A GUARD, AND AN EXAM FOR THE GUARD.
     contradicted later, or a scam?
   - Regulators (e.g. the Financial Stability Board) are still writing the
     rules. There is no standard answer yet — that's the gap I target.
+  - Oct 2026: major US banks (JPMorgan, BofA, Citi, Wells Fargo, Morgan
+    Stanley) reported AI agents inside customer accounts, mostly using the
+    customer's own password, some acting beyond instructions. Banks started
+    blocking them. (Anonymous sources, no confirmed losses.) It shows both
+    gaps: WHO is acting, and WHETHER the customer asked for it.
 
 
 --------------------------------------------------------------------------------
@@ -114,6 +119,8 @@ That's the whole project: A GUARD, AND AN EXAM FOR THE GUARD.
   CON  Customer changed mind    -> ESCALATE / follow the latest instruction
   DRF  Slow drift toward harm   -> ESCALATE (many small OK steps that add up
                                    to something bad)
+  INS  Agent goes beyond what   -> BLOCK / ESCALATE (asked for a balance,
+       the customer asked          agent pays a bill)
   API  Bank system fails        -> no double payment, no lost payment
   CNC  Two agents at once       -> limits still hold (Phase 2)
 
@@ -157,6 +164,18 @@ That's the whole project: A GUARD, AND AN EXAM FOR THE GUARD.
       Was the amount said by the customer, guessed by the agent, or taken
       from an email? A payee that came from an email always escalates.
 
+  - Don't trust the agent's labels
+      The agent could claim "the customer said $450" when they said $45.
+      The control layer checks the claim against the conversation itself.
+
+  - Permission is not approval
+      The customer authorised the agent, but every single action is still
+      checked against what the customer actually asked for in that turn.
+
+  - Redact personal data before the LLM sees it
+      Names and account numbers become tokens (PAYEE_1, ACCOUNT_A). The
+      judge only needs to understand intent.
+
 
 --------------------------------------------------------------------------------
 9. IS THE SCOPE REASONABLE?
@@ -180,7 +199,8 @@ DESIGN PATTERNS
   Chain of Responsibility Rules run first, then the AI judge only if needed.
                          -> pass a request along handlers
   Decorator              FaultInjectingBankGateway wraps the real bank to
-                         simulate failures.
+                         simulate failures; RedactingJudge wraps the real
+                         judge to strip personal data.
                          -> add behaviour without changing the original
   Adapter                ClaudeJudge wraps the Anthropic SDK behind my own
                          Judge interface.
